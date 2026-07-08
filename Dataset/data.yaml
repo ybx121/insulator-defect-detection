@@ -1,0 +1,7 @@
+path: ./datasets/mydata  # 数据集根目录
+train: images            # 训练集文件夹（只有训练集就这么写）
+val:                     # 空着
+test:                    # 空着
+
+nc: 4                    # 类别数量
+names: [ "insulator string", "broken shell", "flavor", "diaochuan" ]
