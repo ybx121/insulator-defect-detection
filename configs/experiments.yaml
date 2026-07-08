@@ -1,0 +1,53 @@
+# Recommended experiment matrix for the research plan.
+
+datasets:
+  coarse: datasets/unified_coarse/data.yaml
+  fine: datasets/unified_fine/data.yaml
+  crops: datasets/unified_fine_crops/data.yaml
+
+stages:
+  coarse_pretrain:
+    model: configs/gf_insuyolo.yaml
+    data: datasets/unified_coarse/data.yaml
+    imgsz: 960
+    epochs: 120
+    name: gf_insuyolo_coarse_960
+  fine_global_960:
+    model: configs/gf_insuyolo.yaml
+    data: datasets/unified_fine/data.yaml
+    imgsz: 960
+    epochs: 150
+    name: gf_insuyolo_fine_960
+  fine_global_1280:
+    model: configs/gf_insuyolo.yaml
+    data: datasets/unified_fine/data.yaml
+    imgsz: 1280
+    epochs: 150
+    name: gf_insuyolo_fine_1280
+  local_crop:
+    model: yolo11s.pt
+    data: datasets/unified_fine_crops/data.yaml
+    imgsz: 640
+    epochs: 120
+    name: gf_insuyolo_local_crop
+
+baselines:
+  - model: yolo11s.pt
+    data: datasets/unified_fine/data.yaml
+    imgsz: 960
+    name: baseline_yolo11s_960
+  - model: yolov8s.pt
+    data: datasets/unified_fine/data.yaml
+    imgsz: 960
+    name: baseline_yolov8s_960
+  - model: rtdetr-l.pt
+    data: datasets/unified_fine/data.yaml
+    imgsz: 960
+    name: baseline_rtdetr_l_960
+
+ablations:
+  - no_coarse_pretrain
+  - no_local_crop
+  - no_p2_head
+  - no_frequency_enhance
+  - no_weather_augmentation

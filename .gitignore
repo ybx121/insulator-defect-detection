@@ -1,0 +1,27 @@
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Training and generated artifacts
+runs/
+weights/
+*.pt
+*.onnx
+*.engine
+
+# Generated datasets
+datasets/
+merged_dataset/
+
+# Local environment files
+.env
+.env.*
