@@ -44,6 +44,9 @@ Python 3.11.15
 pip install -r requirements.txt
 ```
 
+注意：`requirements.txt` 里的 `torch>=2.2.0` / `torchvision>=0.17.0` 没有指定 CUDA wheel。
+Windows NVIDIA GPU 机器建议先用 `requirements-win-cuda.txt` 安装 CUDA 版 PyTorch，再安装项目依赖。
+
 ## 2. 先在 Mac 上跑 Smoke Test
 
 这一步只验证训练流程能跑通，不追求精度。
@@ -74,7 +77,62 @@ python train.py \
   --name smoke_yolo11n_fine_cpu
 ```
 
-## 3. 在 NVIDIA GPU 上训练 Baseline
+## 3. 先在 Windows 上跑 Smoke Test
+
+这一步同样只验证训练流程能跑通，不追求精度。
+
+如果 Windows 机器有 NVIDIA GPU，先安装 CUDA 版 PyTorch。下面以 CUDA 12.6 wheel 为例：
+
+```powershell
+pip uninstall -y torch torchvision torchaudio
+pip install -r .\requirements-win-cuda.txt
+pip install -r .\requirements.txt
+```
+
+如果显卡驱动或环境需要其他 CUDA wheel，例如 CUDA 11.8 或 CUDA 12.8，把 `requirements-win-cuda.txt` 里的 `cu126` 改成 `cu118` 或 `cu128`。
+
+如果 Windows conda 环境之前已经按 `pip install -r requirements.txt` 安装过，可以在同一个环境里直接重装 PyTorch：
+
+```powershell
+conda activate insulator-defect
+pip uninstall -y torch torchvision torchaudio
+pip install -r .\requirements-win-cuda.txt
+pip install -r .\requirements.txt
+```
+
+安装后确认 PyTorch 能看到 CUDA：
+
+```powershell
+python -c "import torch; print(torch.__version__); print(torch.version.cuda); print(torch.cuda.is_available())"
+```
+
+如果最后一行是 `True`，可以使用 `--device 0`：
+
+```powershell
+python .\train.py `
+  --model yolo11n.pt `
+  --data .\datasets\unified_fine\data.yaml `
+  --imgsz 640 `
+  --epochs 3 `
+  --batch 2 `
+  --device 0 `
+  --name smoke_yolo11n_fine_win_cuda
+```
+
+如果 CUDA 不可用，可以先用 CPU 跑通流程：
+
+```powershell
+python .\train.py `
+  --model yolo11n.pt `
+  --data .\datasets\unified_fine\data.yaml `
+  --imgsz 640 `
+  --epochs 3 `
+  --batch 2 `
+  --device cpu `
+  --name smoke_yolo11n_fine_win_cpu
+```
+
+## 4. 在 NVIDIA GPU 上训练 Baseline
 
 正式实验建议使用 CUDA GPU，例如 Colab、AutoDL、Kaggle 或实验室服务器。
 
@@ -99,7 +157,7 @@ python train.py \
 - 每类 Recall
 - 缺陷类 Recall
 
-## 4. 训练 GF-InsuYOLO Coarse 预训练模型
+## 5. 训练 GF-InsuYOLO Coarse 预训练模型
 
 使用 2 类 coarse 数据集学习通用绝缘子和缺陷检测能力：
 
@@ -114,7 +172,7 @@ python train.py \
   --name gf_insuyolo_coarse
 ```
 
-## 5. 用 Coarse 权重 Fine-tune 四分类模型
+## 6. 用 Coarse 权重 Fine-tune 四分类模型
 
 ```bash
 python train.py \
@@ -137,7 +195,7 @@ python train.py \
 3 missing_disc_drop
 ```
 
-## 6. 训练局部 Crop 缺陷检测器
+## 7. 训练局部 Crop 缺陷检测器
 
 局部模型只检测 3 个缺陷类，不检测绝缘子串：
 
@@ -160,7 +218,7 @@ python train.py \
 2 missing_disc_drop
 ```
 
-## 7. 两阶段推理测试
+## 8. 两阶段推理测试
 
 使用全图模型检测绝缘子串和明显缺陷，再使用局部 crop 模型增强小缺陷识别：
 
@@ -183,7 +241,7 @@ python infer.py \
 - `confidence`
 - `source_stage`
 
-## 8. 对比和消融实验
+## 9. 对比和消融实验
 
 至少完成以下对比：
 

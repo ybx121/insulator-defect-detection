@@ -1,0 +1,8 @@
+# Windows NVIDIA CUDA PyTorch wheels.
+# Default CUDA wheel: cu126. If your driver requires another supported wheel,
+# replace cu126 with cu118 or cu128 based on https://pytorch.org/get-started/locally/.
+--index-url https://download.pytorch.org/whl/cu126
+
+torch>=2.2.0
+torchvision>=0.17.0
+torchaudio>=2.2.0

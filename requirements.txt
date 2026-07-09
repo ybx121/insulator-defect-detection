@@ -2,6 +2,8 @@ albumentations>=1.4.0
 opencv-python>=4.9.0
 pillow>=10.0.0
 pyyaml>=6.0.1
+# Generic PyTorch dependency. For Windows NVIDIA CUDA installs, install
+# requirements-win-cuda.txt first, then this file.
 torch>=2.2.0
 torchvision>=0.17.0
 ultralytics>=8.3.0
