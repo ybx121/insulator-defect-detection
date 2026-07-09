@@ -11,6 +11,21 @@
 
 下一步重点是先跑通训练链路，再做 baseline 和改进模型对比。
 
+复标文件已提交到：
+
+```text
+annotations/cplid_defective_fine_labels.csv
+```
+
+如果需要从原始数据重新生成与当前一致的 fine 数据集，使用：
+
+```bash
+python scripts/build_unified_dataset.py \
+  --mode all \
+  --cplid-fine-labels annotations/cplid_defective_fine_labels.csv \
+  --overwrite
+```
+
 ## 1. 激活项目 Conda 环境
 
 ```bash
