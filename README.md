@@ -5,8 +5,8 @@
 2 个 D-FINE 模型。
 
 远程仓库只保存代码、配置、文档、训练日志和结果图，不使用 Git LFS，也不保存数据集
-或模型权重。要直接验证已有模型，需要另外取得数据包和权重包；只从零训练时，取得
-数据包即可，YOLO 与 D-FINE 的通用预训练权重可按下文下载。
+或模型权重。数据集需要由使用者另行放到下文指定位置；YOLO 与 D-FINE 的通用预训练
+权重可按复现步骤下载。
 
 > 数据可信度说明：当前 `Dataset/labels` 原始划分存在跨 train/val/test 的近重复图组。
 > 本文结果是该固定划分上的可复现实验结果，可用于模型横向比较，但不能直接解释为
@@ -35,193 +35,34 @@ Set-Location .\insulator-defect-detection
 - 任意 `.pt`、`.pth`、`.onnx` 或 `.engine` 权重；
 - `runs/third_party/D-FINE` 第三方源码和预训练权重。
 
-## 数据集如何发送和放置
+## 数据集文件夹位置
 
-### 标准交付形式
-
-推荐发送一个名为 `dataset_labels_bundle.zip` 的压缩包，压缩包根目录必须直接包含：
-
-```text
-images/
-├── train/    1568 张
-├── val/       196 张
-└── test/      196 张
-labels/
-├── train/    1568 个 YOLO txt
-├── val/       196 个 YOLO txt
-└── test/      196 个 YOLO txt
-data.yaml
-```
-
-每张图片必须有同名 `.txt` 标签。每行标签使用标准 YOLO 检测格式：
+其他人拿到的数据集格式与本项目一致，只需把数据集文件夹命名为 `labels`，并放到
+项目根目录的 `Dataset` 文件夹下：
 
 ```text
-class_id x_center y_center width height
+insulator-defect-detection/
+└── Dataset/
+    └── labels/
+        ├── data.yaml
+        ├── images/
+        │   ├── train/
+        │   ├── val/
+        │   └── test/
+        └── labels/
+            ├── train/
+            ├── val/
+            └── test/
 ```
 
-坐标均为相对图像宽高归一化到 `[0, 1]` 的值。类别顺序固定为：
-
-```text
-0 insulator_string
-1 broken_shell
-2 flashover_pollution
-3 missing_disc_drop
-```
-
-`data.yaml` 内容应为：
-
-```yaml
-train: images/train
-val: images/val
-test: images/test
-
-nc: 4
-names:
-  0: insulator_string
-  1: broken_shell
-  2: flashover_pollution
-  3: missing_disc_drop
-```
-
-数据统计为：
-
-| 划分 | 图像数 | 类别 0 | 类别 1 | 类别 2 | 类别 3 | 目标总数 |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| train | 1568 | 2031 | 492 | 202 | 583 | 3308 |
-| val | 196 | 267 | 50 | 29 | 80 | 426 |
-| test | 196 | 278 | 53 | 16 | 72 | 419 |
-| 合计 | 1960 | 2576 | 595 | 247 | 735 | 4153 |
-
-当前数据内容指纹为：
-
-```text
-245f2efa823a34fb0d2f409fff3ff6edf566bafb64966784176ee8be3923a4fc
-```
-
-计算规则为：
-
-```text
-sha256(sorted split|image_name|image_sha256|label_sha256)
-```
-
-### 发送方打包
-
-在项目根目录执行：
-
-```powershell
-Push-Location .\Dataset\labels
-tar -a -c -f ..\dataset_labels_bundle.zip images labels data.yaml
-Pop-Location
-
-Get-FileHash -Algorithm SHA256 .\Dataset\dataset_labels_bundle.zip
-```
-
-把生成的 `Dataset/dataset_labels_bundle.zip` 和显示出的 SHA-256 一起发给接收方。
-
-当前已有的 `Dataset/labels.zip` 也可以发送，但它只包含 `images/` 和 `labels/`，没有
-`data.yaml`。使用这个旧压缩包时，必须额外发送 `Dataset/labels/data.yaml`。当前
-`labels.zip` 的 SHA-256 是：
-
-```text
-ad368f5e252b0c463373cee4cbef36e25a0c8d133c376d6d7ff4b41e85890494
-```
-
-### 接收方放置
-
-在克隆后的项目根目录执行，其中 `D:\Transfer\dataset_labels_bundle.zip` 换成实际路径：
-
-```powershell
-New-Item -ItemType Directory -Force .\Dataset\labels | Out-Null
-tar -xf D:\Transfer\dataset_labels_bundle.zip -C .\Dataset\labels
-```
-
-最终必须存在：
+训练配置使用的固定相对路径是：
 
 ```text
 Dataset/labels/data.yaml
-Dataset/labels/images/train
-Dataset/labels/images/val
-Dataset/labels/images/test
-Dataset/labels/labels/train
-Dataset/labels/labels/val
-Dataset/labels/labels/test
 ```
 
-检查文件数量：
-
-```powershell
-$rows = foreach ($split in 'train', 'val', 'test') {
-  [pscustomobject]@{
-    Split  = $split
-    Images = (Get-ChildItem ".\Dataset\labels\images\$split" -File).Count
-    Labels = (Get-ChildItem ".\Dataset\labels\labels\$split" -File).Count
-  }
-}
-$rows | Format-Table -AutoSize
-```
-
-预期输出：
-
-```text
-train  1568  1568
-val     196   196
-test    196   196
-```
-
-## 权重如何发送和放置
-
-如果接收方只准备从零训练，可以跳过本节。如果需要直接验证、推理或对照本文结果，
-发送方应把八个最佳权重按原相对路径打包。
-
-### 八个固定权重路径
-
-```text
-runs/detect/runs/detect/dataset_labels_retrain/yolo11s_img960/weights/best.pt
-runs/detect/runs/detect/dataset_labels_retrain/yolo11s_img1280/weights/best.pt
-runs/detect/runs/detect/dataset_labels_retrain/yolo11m_img960/weights/best.pt
-runs/detect/runs/detect/dataset_labels_retrain/yolo11m_p2_img960/weights/best.pt
-runs/detect/runs/detect/dataset_labels_retrain/gf_insuyolo_img960/weights/best.pt
-runs/detect/runs/detect/dataset_labels_retrain/yolo11s_context_img960/weights/best.pt
-runs/dfine/dfine_m_img960/best_stg2.pth
-runs/dfine/dfine_l_img960/best_stg2.pth
-```
-
-### 发送方打包权重
-
-在项目根目录执行：
-
-```powershell
-tar -a -c -f .\dataset_labels_best_weights.zip `
-  runs/detect/runs/detect/dataset_labels_retrain/yolo11s_img960/weights/best.pt `
-  runs/detect/runs/detect/dataset_labels_retrain/yolo11s_img1280/weights/best.pt `
-  runs/detect/runs/detect/dataset_labels_retrain/yolo11m_img960/weights/best.pt `
-  runs/detect/runs/detect/dataset_labels_retrain/yolo11m_p2_img960/weights/best.pt `
-  runs/detect/runs/detect/dataset_labels_retrain/gf_insuyolo_img960/weights/best.pt `
-  runs/detect/runs/detect/dataset_labels_retrain/yolo11s_context_img960/weights/best.pt `
-  runs/dfine/dfine_m_img960/best_stg2.pth `
-  runs/dfine/dfine_l_img960/best_stg2.pth
-
-Get-FileHash -Algorithm SHA256 .\dataset_labels_best_weights.zip
-```
-
-接收方把压缩包解压到项目根目录，不能只把文件放进一个统一的 `weights` 文件夹：
-
-```powershell
-tar -xf D:\Transfer\dataset_labels_best_weights.zip -C .
-```
-
-### 权重完整性
-
-| 模型 | 大小 | SHA-256 |
-| --- | ---: | --- |
-| YOLO11s 960 | 18.4 MiB | `a9c9e155f8134e39e63367ce11eaf94a80fd1637393ba63be64c8e2986a299af` |
-| YOLO11s 1280 | 18.4 MiB | `f326f9fe2ef9ee5b394b7eb24fc410a3ee60000a4961b488f2e5db8758f19d6a` |
-| YOLO11m 960 | 38.7 MiB | `bda6ecc03ddc39f35b6c0a4105f5ee4e28a72b174e201fc994f70ccd826cf09e` |
-| YOLO11m-P2 960 | 39.0 MiB | `c98417777e8e11e132474bcb462d1e9fa7a54f1f328ea7ed227cd2caa5d49112` |
-| GF-InsuYOLO 960 | 6.3 MiB | `e3cf9dfbbbb6799aa0e9d440d65a788f0a4685f110ea8ea6f6cd72c6b1861f48` |
-| YOLO11s Context 960 | 18.8 MiB | `e8b1e2cba12bbd5d6a1131a360081fd041118bf72f67a6ad630e568b1414e2bd` |
-| D-FINE M 960 | 299.5 MiB | `897a81276fc79615f59e937c4a582414a0783a684dd1a9471e14c144323f4e80` |
-| D-FINE L 960 | 477.1 MiB | `455828d5826f7a39f432ffef5433c85639a7f362d9da3e9caf50794b9d0ec148` |
+不要放成 `Dataset/labels/labels/images/...`，也不要修改
+`configs/dataset_labels_train_matrix.yaml` 中的数据集路径。
 
 ## 八模型验证结果
 
@@ -275,9 +116,9 @@ python -c "import torch; print(torch.__version__); print(torch.version.cuda); pr
 
 最后两项应显示 `True` 和实际 NVIDIA GPU 名称。
 
-### 2. 放置并检查数据集
+### 2. 检查数据集位置
 
-按“数据集如何发送和放置”一节把完整数据解压到：
+确认数据集文件夹名为 `labels`，并位于：
 
 ```text
 Dataset/labels
@@ -497,7 +338,7 @@ dfine_m_img960
 dfine_l_img960
 ```
 
-## 直接使用收到的 YOLO 权重
+## 使用已有 YOLO 权重
 
 以 YOLO11s Context 960 为例验证：
 
@@ -538,7 +379,6 @@ Ultralytics CLI。
 - 使用种子 `20260731`、固定原始划分和训练矩阵中的 batch/尺寸。
 - YOLO 比较使用各任务的 `weights/best.pt`。
 - D-FINE M/L 比较使用各任务的 `best_stg2.pth`。
-- 收到权重后逐个核对 SHA-256，不能把占位文件当作真实权重。
 - 不使用 Git LFS，也不要期望普通 `git clone` 下载数据或权重。
 - 当前表格只代表原始验证划分；无泄漏新划分建立后必须重新训练并单独排名。
 
