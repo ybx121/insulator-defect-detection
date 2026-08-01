@@ -1,0 +1,10 @@
+COCO train: images=1568 annotations=3308
+COCO val: images=196 annotations=426
+COCO test: images=196 annotations=419
+wrote E:\School\insulator-defect-detection\runs\third_party\D-FINE\configs\dataset\insulator_detection.yml and E:\School\insulator-defect-detection\runs\third_party\D-FINE\configs\dfine\custom\dfine_hgnetv2_m_dataset_labels_coco.yml
+D-FINE command: C:\Users\Lenovo\anaconda3\envs\insulator-defect\python.exe train.py -c configs/dfine/custom/dfine_hgnetv2_m_dataset_labels_coco.yml --use-amp --seed=20260708 -t weights/dfine_m_coco.pth
+COCO train: images=1568 annotations=3308
+COCO val: images=196 annotations=426
+COCO test: images=196 annotations=419
+wrote E:\School\insulator-defect-detection\runs\third_party\D-FINE\configs\dataset\insulator_detection.yml and E:\School\insulator-defect-detection\runs\third_party\D-FINE\configs\dfine\custom\dfine_hgnetv2_l_dataset_labels_coco.yml
+D-FINE command: C:\Users\Lenovo\anaconda3\envs\insulator-defect\python.exe train.py -c configs/dfine/custom/dfine_hgnetv2_l_dataset_labels_coco.yml --use-amp --seed=20260708 -t weights/dfine_l_coco.pth

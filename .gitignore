@@ -1,0 +1,58 @@
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Training and generated artifacts
+/runs/*
+/weights/
+*.pt
+*.pth
+*.onnx
+*.engine
+
+# Publish the Dataset/labels retraining queue and the eight retained runs.
+!/runs/dataset_labels_retrain/
+!/runs/dataset_labels_retrain/**
+
+!/runs/detect/
+/runs/detect/*
+!/runs/detect/runs/
+/runs/detect/runs/*
+!/runs/detect/runs/detect/
+/runs/detect/runs/detect/*
+!/runs/detect/runs/detect/dataset_labels_retrain/
+!/runs/detect/runs/detect/dataset_labels_retrain/**
+
+!/runs/dfine/
+/runs/dfine/*
+!/runs/dfine/dfine_m_img960/
+!/runs/dfine/dfine_m_img960/**
+!/runs/dfine/dfine_l_img960/
+!/runs/dfine/dfine_l_img960/**
+
+# Keep all model checkpoints local, including the selected best checkpoints.
+/runs/detect/runs/detect/dataset_labels_retrain/*/weights/*.pt
+/runs/dfine/dfine_m_img960/**/*.pth
+/runs/dfine/dfine_l_img960/**/*.pth
+
+# Generated datasets
+datasets/
+merged_dataset/
+/InsulatorDataSet/
+
+# All Dataset content, including Dataset/labels, remains local and is not
+# versioned. Training configuration documents the expected local layout.
+/Dataset/
+
+# Local environment files
+.env
+.env.*

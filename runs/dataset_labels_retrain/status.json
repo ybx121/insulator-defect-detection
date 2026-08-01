@@ -1,0 +1,67 @@
+{
+  "matrix": "E:\\School\\insulator-defect-detection\\configs\\dataset_labels_train_matrix.yaml",
+  "dataset": "E:\\School\\insulator-defect-detection\\Dataset\\labels\\data.yaml",
+  "pid": 26992,
+  "started_at": "2026-07-31T14:24:39.521490+00:00",
+  "updated_at": "2026-08-01T14:17:26.575918+00:00",
+  "state": "complete",
+  "jobs": {
+    "yolo11s_img960": {
+      "state": "complete",
+      "started_at": "2026-07-31T14:24:39.526488+00:00",
+      "finished_at": "2026-07-31T16:12:18.986581+00:00",
+      "elapsed_seconds": 6459.453999999911,
+      "returncode": 0
+    },
+    "yolo11s_img1280": {
+      "state": "complete",
+      "started_at": "2026-07-31T16:12:18.998136+00:00",
+      "finished_at": "2026-07-31T19:07:05.990157+00:00",
+      "elapsed_seconds": 10486.985000000102,
+      "returncode": 0
+    },
+    "yolo11m_img960": {
+      "state": "complete",
+      "started_at": "2026-07-31T19:07:05.998856+00:00",
+      "finished_at": "2026-07-31T22:09:54.813820+00:00",
+      "elapsed_seconds": 10968.25,
+      "returncode": 0
+    },
+    "yolo11m_p2_img960": {
+      "state": "complete",
+      "started_at": "2026-07-31T22:09:54.818837+00:00",
+      "finished_at": "2026-08-01T04:18:17.678056+00:00",
+      "elapsed_seconds": 22102.21900000004,
+      "returncode": 0
+    },
+    "gf_insuyolo_img960": {
+      "state": "complete",
+      "started_at": "2026-08-01T04:18:17.682059+00:00",
+      "finished_at": "2026-08-01T06:05:59.467143+00:00",
+      "elapsed_seconds": 6461.688000000082,
+      "returncode": 0
+    },
+    "yolo11s_context_img960": {
+      "state": "complete",
+      "started_at": "2026-08-01T06:05:59.474144+00:00",
+      "finished_at": "2026-08-01T07:59:50.766609+00:00",
+      "elapsed_seconds": 6831.171999999788,
+      "returncode": 0
+    },
+    "dfine_m_img960": {
+      "state": "complete",
+      "started_at": "2026-08-01T08:00:57.591113+00:00",
+      "finished_at": "2026-08-01T11:03:46.361303+00:00",
+      "elapsed_seconds": 10968.625,
+      "returncode": 0
+    },
+    "dfine_l_img960": {
+      "state": "complete",
+      "started_at": "2026-08-01T11:03:46.367127+00:00",
+      "finished_at": "2026-08-01T14:17:26.572936+00:00",
+      "elapsed_seconds": 11620.046999999788,
+      "returncode": 0
+    }
+  },
+  "finished_at": "2026-08-01T14:17:26.575918+00:00"
+}

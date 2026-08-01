@@ -1,0 +1,31 @@
+diff --git a/src/solver/det_solver.py b/src/solver/det_solver.py
+--- a/src/solver/det_solver.py
++++ b/src/solver/det_solver.py
+@@
+         best_stat = {
+             "epoch": -1,
+         }
++        best_map50 = -1.0
++        best_map50_metadata = self.output_dir / "best_map50.json" if self.output_dir else None
++        if best_map50_metadata and best_map50_metadata.exists():
++            with best_map50_metadata.open("r", encoding="utf-8") as file:
++                best_map50 = float(json.load(file).get("map50", best_map50))
+@@
+             test_stats, coco_evaluator = evaluate(
+@@
+                 output_dir=self.output_dir,
+             )
+ 
++            bbox_stats = test_stats.get("coco_eval_bbox")
++            if bbox_stats and len(bbox_stats) > 1 and bbox_stats[1] > best_map50:
++                best_map50 = float(bbox_stats[1])
++                if self.output_dir:
++                    dist_utils.save_on_master(
++                        self.state_dict(), self.output_dir / "best_map50.pth"
++                    )
++                    if dist_utils.is_main_process():
++                        with best_map50_metadata.open("w", encoding="utf-8") as file:
++                            json.dump({"epoch": epoch, "map50": best_map50}, file)
++                print(f"best_map50: epoch={epoch}, AP50={best_map50:.6f}")
++
+             # TODO

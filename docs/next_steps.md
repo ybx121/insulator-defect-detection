@@ -1,0 +1,283 @@
+# Next Steps for Insulator Defect Detection
+
+当前项目已经完成：
+
+- CPLID 缺陷图复标
+- `unified_coarse` 数据集构建
+- `unified_fine` 数据集构建
+- `unified_fine_crops_v2` 正负样本局部 crop 数据集构建
+- 数据集校验
+- 训练入口和推理入口实现
+
+下一步重点是先跑通训练链路，再做 baseline 和改进模型对比。
+
+复标文件已提交到：
+
+```text
+annotations/cplid_defective_fine_labels.csv
+```
+
+如果需要从原始数据重新生成与当前一致的 fine 数据集，使用：
+
+```bash
+python scripts/build_unified_dataset.py \
+  --mode all \
+  --cplid-fine-labels annotations/cplid_defective_fine_labels.csv \
+  --overwrite
+```
+
+## 1. 激活项目 Conda 环境
+
+```bash
+conda activate insulator-defect
+```
+
+当前环境 Python 版本：
+
+```text
+Python 3.11.15
+```
+
+如果训练环境还没有安装 PyTorch 和 Ultralytics，先安装依赖：
+
+```bash
+pip install -r requirements.txt
+```
+
+注意：`requirements.txt` 里的 `torch>=2.2.0` / `torchvision>=0.17.0` 没有指定 CUDA wheel。
+Windows NVIDIA GPU 机器建议先用 `requirements-win-cuda.txt` 安装 CUDA 版 PyTorch，再安装项目依赖。
+
+## 2. 先在 Mac 上跑 Smoke Test
+
+这一步只验证训练流程能跑通，不追求精度。
+
+Apple Silicon Mac 可以尝试使用 `mps`：
+
+```bash
+python train.py \
+  --model yolo11n.pt \
+  --data datasets/unified_fine/data.yaml \
+  --imgsz 640 \
+  --epochs 3 \
+  --batch 2 \
+  --device mps \
+  --name smoke_yolo11n_fine
+```
+
+如果 `mps` 报错，可以改成 CPU：
+
+```bash
+python train.py \
+  --model yolo11n.pt \
+  --data datasets/unified_fine/data.yaml \
+  --imgsz 640 \
+  --epochs 3 \
+  --batch 2 \
+  --device cpu \
+  --name smoke_yolo11n_fine_cpu
+```
+
+## 3. 先在 Windows 上跑 Smoke Test
+
+这一步同样只验证训练流程能跑通，不追求精度。
+
+如果 Windows 机器有 NVIDIA GPU，先安装 CUDA 版 PyTorch。下面以 CUDA 12.6 wheel 为例：
+
+```powershell
+pip uninstall -y torch torchvision torchaudio
+pip install -r .\requirements-win-cuda.txt
+pip install -r .\requirements.txt
+```
+
+如果显卡驱动或环境需要其他 CUDA wheel，例如 CUDA 11.8 或 CUDA 12.8，把 `requirements-win-cuda.txt` 里的 `cu126` 改成 `cu118` 或 `cu128`。
+
+如果 Windows conda 环境之前已经按 `pip install -r requirements.txt` 安装过，可以在同一个环境里直接重装 PyTorch：
+
+```powershell
+conda activate insulator-defect
+pip uninstall -y torch torchvision torchaudio
+pip install -r .\requirements-win-cuda.txt
+pip install -r .\requirements.txt
+```
+
+安装后确认 PyTorch 能看到 CUDA：
+
+```powershell
+python -c "import torch; print(torch.__version__); print(torch.version.cuda); print(torch.cuda.is_available())"
+```
+
+如果最后一行是 `True`，可以使用 `--device 0`：
+
+```powershell
+python .\train.py `
+  --model yolo11n.pt `
+  --data .\datasets\unified_fine\data.yaml `
+  --imgsz 640 `
+  --epochs 3 `
+  --batch 2 `
+  --device 0 `
+  --name smoke_yolo11n_fine_win_cuda
+```
+
+如果 CUDA 不可用，可以先用 CPU 跑通流程：
+
+```powershell
+python .\train.py `
+  --model yolo11n.pt `
+  --data .\datasets\unified_fine\data.yaml `
+  --imgsz 640 `
+  --epochs 3 `
+  --batch 2 `
+  --device cpu `
+  --name smoke_yolo11n_fine_win_cpu
+```
+
+## 4. 在 NVIDIA GPU 上训练 Baseline
+
+正式实验建议使用 CUDA GPU，例如 Colab、AutoDL、Kaggle 或实验室服务器。
+
+先训练一个成熟 YOLO baseline：
+
+```bash
+python train.py \
+  --model yolo11s.pt \
+  --data datasets/unified_fine/data.yaml \
+  --imgsz 960 \
+  --epochs 100 \
+  --batch 8 \
+  --device 0 \
+  --name baseline_yolo11s_fine
+```
+
+训练完成后记录：
+
+- mAP@0.5
+- mAP@0.5:0.95
+- 每类 Precision
+- 每类 Recall
+- 缺陷类 Recall
+
+## 5. 训练 GF-InsuYOLO Coarse 预训练模型
+
+使用 2 类 coarse 数据集学习通用绝缘子和缺陷检测能力：
+
+```bash
+python train.py \
+  --model configs/gf_insuyolo.yaml \
+  --data datasets/unified_coarse/data.yaml \
+  --imgsz 960 \
+  --epochs 120 \
+  --batch 8 \
+  --device 0 \
+  --name gf_insuyolo_coarse
+```
+
+## 6. 用 Coarse 权重 Fine-tune 四分类模型
+
+```bash
+python train.py \
+  --model configs/gf_insuyolo.yaml \
+  --weights runs/gf_insuyolo_coarse/weights/best.pt \
+  --data datasets/unified_fine/data.yaml \
+  --imgsz 960 \
+  --epochs 150 \
+  --batch 8 \
+  --device 0 \
+  --name gf_insuyolo_fine
+```
+
+四分类类别：
+
+```text
+0 insulator_string
+1 broken_shell
+2 flashover_pollution
+3 missing_disc_drop
+```
+
+## 7. 训练局部 Crop 缺陷检测器
+
+局部模型只检测 3 个缺陷类，不检测绝缘子串：
+
+```bash
+python train.py \
+  --model yolo11s.pt \
+  --data datasets/unified_fine_crops_v2/data.yaml \
+  --imgsz 640 \
+  --epochs 70 \
+  --batch 16 \
+  --device 0 \
+  --name local_crop_detector_v2
+```
+
+局部 crop 类别：
+
+```text
+0 broken_shell
+1 flashover_pollution
+2 missing_disc_drop
+```
+
+## 8. 两阶段推理测试
+
+使用 coarse 模型生成绝缘子 crop，再使用局部模型输出细粒度缺陷：
+
+```bash
+python infer.py \
+  --weights runs/detect/runs/gf_insuyolo_coarse/weights/best.pt \
+  --local-weights runs/detect/runs/local_crop_detector_v2/weights/best.pt \
+  --source test_images \
+  --two-stage \
+  --global-imgsz 960 \
+  --local-imgsz 640 \
+  --global-conf 0.15 \
+  --local-conf 0.25 \
+  --device 0 \
+  --output runs/infer/two_stage_predictions.json
+```
+
+在原始 test 图片上评估完整级联：
+
+```bash
+python scripts/evaluate_two_stage.py \
+  --global-weights runs/detect/runs/gf_insuyolo_coarse/weights/best.pt \
+  --local-weights runs/detect/runs/local_crop_detector_v2/weights/best.pt \
+  --data datasets/unified_fine/data.yaml \
+  --split test \
+  --device 0 \
+  --output runs/eval/two_stage_v2_test.json
+```
+
+输出 JSON 中每张图包含：
+
+- `image`
+- `has_defect`
+- `insulator_boxes`
+- `defect_boxes`
+- `class_name`
+- `confidence`
+- `source_stage`
+
+## 9. 对比和消融实验
+
+至少完成以下对比：
+
+```text
+baseline_yolo11s_fine
+gf_insuyolo_fine
+gf_insuyolo_coarse + local_crop_detector_v2
+```
+
+建议消融：
+
+- 不使用 coarse 预训练
+- 不使用局部 crop 检测器
+- 不使用 P2 小目标检测头
+- 不使用 FrequencyEnhance 频域增强模块
+
+最终论文重点比较：
+
+- 检测精度是否提升
+- 小目标缺陷 Recall 是否提升
+- 缺陷类别识别是否更稳定
+- 两阶段推理是否减少漏检

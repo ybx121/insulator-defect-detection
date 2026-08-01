@@ -1,0 +1,189 @@
+# Recommended experiment matrix for the research plan.
+
+datasets:
+  coarse: datasets/unified_coarse/data.yaml
+  fine: datasets/unified_fine/data.yaml
+  crops: datasets/unified_fine_crops_v2/data.yaml
+  credible_fine_unbalanced: datasets/credible_fine_v1/data_unbalanced.yaml
+  credible_fine_balanced: datasets/credible_fine_v1/data.yaml
+  credible_fine_sliced: datasets/credible_fine_v1_sliced/data.yaml
+  credible_fine_crops: datasets/credible_fine_v1_crops/data_efficient.yaml
+  credible_fine_defect_projection: datasets/credible_fine_v1_defects/data.yaml
+  credible_fine_idid_defect_projection: datasets/credible_fine_v1_idid_defects/data.yaml
+  credible_fine_v2: datasets/credible_fine_v2/data.yaml
+  credible_fine_v2_coco: datasets/credible_fine_v2_coco
+
+credible_v1:
+  fingerprint: 5b0cab9c44f6985659841ee5dc463284582c711037c987ac78c0a8a6581eb113
+  baseline:
+    model: yolo11s.pt
+    data: datasets/credible_fine_v1/data_unbalanced.yaml
+    imgsz: 960
+    epochs: 60
+    batch: 16
+    name: credible_v1_yolo11s_960_unbalanced
+  augmentation_ablation:
+    fixed:
+      model: yolo11s.pt
+      data: datasets/credible_fine_v1/data_unbalanced.yaml
+      imgsz: 960
+      epochs: 40
+      batch: 16
+      seed: 20260708
+    presets:
+      - none
+      - defect_safe
+      - moderate
+  p2:
+    model: configs/yolo11m_p2.yaml
+    weights: yolo11m.pt
+    data: datasets/credible_fine_v1/data.yaml
+    imgsz: 960
+    epochs: 40
+    batch: 6
+    augment_preset: moderate
+    name: credible_v1_yolo11m_p2_960_b6
+  p2_sliced:
+    model: configs/yolo11m_p2.yaml
+    weights: yolo11m.pt
+    data: datasets/credible_fine_v1_sliced/data.yaml
+    imgsz: 768
+    epochs: 30
+    batch: 8
+    augment_preset: moderate
+    name: credible_v1_yolo11m_p2_sliced
+  yolo11s_sliced_finetune:
+    model: yolo11s.pt
+    weights: runs/detect/runs/credible_v1_yolo11s_960_aug_moderate_40/weights/best_map50.pt
+    data: datasets/credible_fine_v1_sliced/data.yaml
+    imgsz: 768
+    epochs: 30
+    batch: 16
+    optimizer: AdamW
+    lr0: 0.001
+    augment_preset: moderate
+    name: credible_v1_yolo11s_sliced_768_ft
+  local_roi:
+    model: yolo11s.pt
+    data: datasets/credible_fine_v1_crops/data_efficient.yaml
+    imgsz: 640
+    epochs: 30
+    batch: 16
+    workers: 4
+    optimizer: AdamW
+    lr0: 0.001
+    augment_preset: moderate
+    name: credible_v1_local_roi_yolo11s_640_efficient_v2
+  context_refinement:
+    model: configs/yolo11s_context.yaml
+    weights: runs/detect/runs/credible_v1_yolo11s_960_aug_moderate_40/weights/best_map50.pt
+    data: datasets/credible_fine_v1/data_unbalanced.yaml
+    imgsz: 960
+    epochs: 30
+    batch: 12
+    optimizer: AdamW
+    lr0: 0.0005
+    warmup_epochs: 0
+    warmup_bias_lr: 0
+    context_only: true
+    augment_preset: moderate
+    name: credible_v1_yolo11s_context_960_ft
+  defect_expert:
+    model: yolo11s.pt
+    weights: runs/detect/runs/credible_v1_yolo11s_960_aug_moderate_40/weights/best_map50.pt
+    data: datasets/credible_fine_v1_defects/data.yaml
+    imgsz: 960
+    epochs: 30
+    batch: 8
+    optimizer: AdamW
+    lr0: 0.0005
+    augment_preset: moderate
+    name: credible_v1_yolo11s_defect_expert_960
+  balanced_head_finetune:
+    model: yolo11s.pt
+    weights: runs/detect/runs/credible_v1_yolo11s_960_aug_moderate_40/weights/best_map50.pt
+    data: datasets/credible_fine_v1/data.yaml
+    imgsz: 960
+    epochs: 8
+    batch: 16
+    freeze: 10
+    optimizer: AdamW
+    lr0: 0.0002
+    augment_preset: moderate
+    name: credible_v1_yolo11s_balanced_head_ft
+
+credible_v2:
+  fingerprint: e45e9272436fcaea448f4e4edc7c252989f5be3db8b1a8400a5ba97d034e97e1
+  accepted_human_candidates:
+    images: 41
+    boxes: 44
+    policy: approved_only
+  dfine_m_coco:
+    config: runs/third_party/D-FINE/configs/dfine/custom/dfine_hgnetv2_m_insulator.yml
+    weights: runs/dfine/credible_fine_v2_dfine_m_960/best_stg2.pth
+    imgsz: 960
+    map50: 0.8257
+  dfine_m_obj2coco:
+    config: runs/third_party/D-FINE/configs/dfine/custom/dfine_hgnetv2_m_insulator_obj2coco.yml
+    weights: runs/dfine/credible_fine_v2_dfine_m_obj2coco_960/best_map50.pth
+    imgsz: 960
+    map50: 0.8080
+    result: rejected
+  dfine_l_coco:
+    config: runs/third_party/D-FINE/configs/dfine/custom/dfine_hgnetv2_l_insulator_coco.yml
+    weights: runs/dfine/credible_fine_v2_dfine_l_coco_960_b4_fixed/best_map50.pth
+    imgsz: 960
+    map50: 0.8177
+    result: fusion_only
+  best_validation:
+    report: runs/eval/credible_v2_dfine_ml_yolo_full_ensemble_val_bootstrap.json
+    map50: 0.8375
+    map50_ci95: [0.8058, 0.8735]
+    locked_test_used: false
+
+stages:
+  coarse_pretrain:
+    model: configs/gf_insuyolo.yaml
+    data: datasets/unified_coarse/data.yaml
+    imgsz: 960
+    epochs: 120
+    name: gf_insuyolo_coarse_960
+  fine_global_960:
+    model: configs/gf_insuyolo.yaml
+    data: datasets/unified_fine/data.yaml
+    imgsz: 960
+    epochs: 150
+    name: gf_insuyolo_fine_960
+  fine_global_1280:
+    model: configs/gf_insuyolo.yaml
+    data: datasets/unified_fine/data.yaml
+    imgsz: 1280
+    epochs: 150
+    name: gf_insuyolo_fine_1280
+  local_crop:
+    model: yolo11s.pt
+    data: datasets/unified_fine_crops_v2/data.yaml
+    imgsz: 640
+    epochs: 70
+    name: local_crop_detector_v2
+
+baselines:
+  - model: yolo11s.pt
+    data: datasets/unified_fine/data.yaml
+    imgsz: 960
+    name: baseline_yolo11s_960
+  - model: yolov8s.pt
+    data: datasets/unified_fine/data.yaml
+    imgsz: 960
+    name: baseline_yolov8s_960
+  - model: rtdetr-l.pt
+    data: datasets/unified_fine/data.yaml
+    imgsz: 960
+    name: baseline_rtdetr_l_960
+
+ablations:
+  - no_coarse_pretrain
+  - no_local_crop
+  - no_p2_head
+  - no_frequency_enhance
+  - augmentation_none_vs_defect_safe_vs_moderate

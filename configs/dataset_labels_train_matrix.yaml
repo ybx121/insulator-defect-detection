@@ -1,0 +1,70 @@
+# Full-image retraining matrix for the authoritative Dataset/labels export.
+#
+# The source split is retained exactly as supplied by the user. Results from
+# this matrix are therefore historical/source-split experiments and must not
+# be mixed with the grouped, leakage-free benchmark described in
+# docs/optimization_execution_plan_dataset_labels.md.
+
+dataset: Dataset/labels/data.yaml
+python: python
+seed: 20260731
+project: runs/detect/dataset_labels_retrain
+
+common:
+  epochs: 100
+  patience: 30
+  workers: 4
+  augment_preset: moderate
+  device: "0"
+
+yolo_jobs:
+  - name: yolo11s_img960
+    model: yolo11s.pt
+    imgsz: 960
+    batch: 16
+
+  - name: yolo11s_img1280
+    model: yolo11s.pt
+    imgsz: 1280
+    batch: 8
+
+  - name: yolo11m_img960
+    model: yolo11m.pt
+    imgsz: 960
+    batch: 8
+
+  - name: yolo11m_p2_img960
+    model: configs/yolo11m_p2.yaml
+    weights: yolo11m.pt
+    imgsz: 960
+    batch: 6
+
+  - name: gf_insuyolo_img960
+    model: configs/gf_insuyolo.yaml
+    imgsz: 960
+    batch: 6
+
+  - name: yolo11s_context_img960
+    model: configs/yolo11s_context.yaml
+    weights: yolo11s.pt
+    imgsz: 960
+    batch: 12
+
+dfine:
+  dataset: Dataset/labels
+  coco_output: datasets/dataset_labels_coco
+  root: runs/third_party/D-FINE
+  epochs: 15
+  imgsz: 960
+  jobs:
+    - name: dfine_m_img960
+      model_size: m
+      batch: 4
+      pretrained_variant: coco
+      config_name: dfine_hgnetv2_m_dataset_labels_coco.yml
+
+    - name: dfine_l_img960
+      model_size: l
+      batch: 4
+      pretrained_variant: coco
+      config_name: dfine_hgnetv2_l_dataset_labels_coco.yml

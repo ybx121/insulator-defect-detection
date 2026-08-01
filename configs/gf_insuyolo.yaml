@@ -1,0 +1,50 @@
+# GF-InsuYOLO: Global-Fine Insulator YOLO
+# Ultralytics-compatible model YAML with:
+# - P2 detection head for small defects
+# - lightweight FrequencyEnhance module on shallow features
+
+nc: 4
+scales:
+  n: [0.33, 0.25, 1024]
+  s: [0.33, 0.50, 1024]
+  m: [0.67, 0.75, 768]
+
+backbone:
+  - [-1, 1, Conv, [64, 3, 2]]          # 0-P1/2
+  - [-1, 1, Conv, [128, 3, 2]]         # 1-P2/4
+  - [-1, 3, C2f, [128, True]]          # 2
+  - [-1, 1, FrequencyEnhance, [0.12, 0.18]]  # 3-P2 frequency-enhanced
+  - [-1, 1, Conv, [256, 3, 2]]         # 4-P3/8
+  - [-1, 6, C2f, [256, True]]          # 5
+  - [-1, 1, Conv, [512, 3, 2]]         # 6-P4/16
+  - [-1, 6, C2f, [512, True]]          # 7
+  - [-1, 1, Conv, [1024, 3, 2]]        # 8-P5/32
+  - [-1, 3, C2f, [1024, True]]         # 9
+  - [-1, 1, SPPF, [1024, 5]]           # 10
+
+head:
+  - [-1, 1, nn.Upsample, [None, 2, nearest]]
+  - [[-1, 7], 1, Concat, [1]]
+  - [-1, 3, C2f, [512]]                # 13-P4
+
+  - [-1, 1, nn.Upsample, [None, 2, nearest]]
+  - [[-1, 5], 1, Concat, [1]]
+  - [-1, 3, C2f, [256]]                # 16-P3
+
+  - [-1, 1, nn.Upsample, [None, 2, nearest]]
+  - [[-1, 3], 1, Concat, [1]]
+  - [-1, 3, C2f, [128]]                # 19-P2
+
+  - [-1, 1, Conv, [128, 3, 2]]
+  - [[-1, 16], 1, Concat, [1]]
+  - [-1, 3, C2f, [256]]                # 22-P3
+
+  - [-1, 1, Conv, [256, 3, 2]]
+  - [[-1, 13], 1, Concat, [1]]
+  - [-1, 3, C2f, [512]]                # 25-P4
+
+  - [-1, 1, Conv, [512, 3, 2]]
+  - [[-1, 10], 1, Concat, [1]]
+  - [-1, 3, C2f, [1024]]               # 28-P5
+
+  - [[19, 22, 25, 28], 1, Detect, [nc]]

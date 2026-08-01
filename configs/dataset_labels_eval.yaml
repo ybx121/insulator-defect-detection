@@ -1,0 +1,10 @@
+train: ../Dataset/labels/images/train
+val: ../Dataset/labels/images/val
+test: ../Dataset/labels/images/test
+
+nc: 4
+names:
+  0: insulator_string
+  1: broken_shell
+  2: flashover_pollution
+  3: missing_disc_drop
