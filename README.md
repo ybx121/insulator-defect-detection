@@ -1,33 +1,179 @@
 # insulator-defect-detection
 
-输电线路绝缘子缺陷检测与识别研究工程。仓库同时保留防泄漏的
-`credible_fine_v2` 历史基准，以及在用户指定 `Dataset/labels` 原始划分上完成的
-YOLO、GF-InsuYOLO 和 D-FINE 八模型重训练结果。`Dataset/labels` 的原始划分存在
-跨划分近重复图组，因此这批结果用于历史复现和后续优化，不应直接解释为无泄漏泛化性能。
+输电线路绝缘子缺陷检测与识别研究工程。当前复现主线使用本地新数据集
+`Dataset/labels`，在同一原始 train/val/test 划分上训练并比较 6 个 YOLO 系模型和
+2 个 D-FINE 模型。
 
-## 完整克隆与发布内容
+远程仓库只保存代码、配置、文档、训练日志和结果图，不使用 Git LFS，也不保存数据集
+或模型权重。要直接验证已有模型，需要另外取得数据包和权重包；只从零训练时，取得
+数据包即可，YOLO 与 D-FINE 的通用预训练权重可按下文下载。
 
-本仓库使用 Git LFS 保存模型权重。要获得代码、文档、训练结果和真实权重文件，
-请安装 Git LFS 后执行：
+> 数据可信度说明：当前 `Dataset/labels` 原始划分存在跨 train/val/test 的近重复图组。
+> 本文结果是该固定划分上的可复现实验结果，可用于模型横向比较，但不能直接解释为
+> 严格无泄漏的泛化性能。详细审计见
+> `docs/optimization_execution_plan_dataset_labels.md`。
+
+## 克隆仓库
+
+普通 Git 克隆即可，不需要安装或运行 Git LFS：
 
 ```powershell
-git lfs install
 git clone git@github.com:ybx121/insulator-defect-detection.git
 Set-Location .\insulator-defect-detection
-git lfs pull
-git lfs ls-files
 ```
 
-不要依赖 GitHub 的“Download ZIP”代替上述流程，因为源码归档是否包含 LFS 对象
-取决于仓库设置。正常 `git clone` 配合 Git LFS 会下载本次发布的完整内容。
+远程仓库包含：
 
-仓库发布范围包括：
+- 项目代码、模型 YAML、训练矩阵和依赖文件；
+- 八个实验的日志、参数、指标 CSV、曲线和验证可视化；
+- 完整队列状态 `runs/dataset_labels_retrain/status.json`。
 
-- 全部版本化代码、配置和文档；
-- 八个重训练任务的日志、参数、指标、曲线、可视化样例和最佳权重；
-- 队列状态与实验清单，位于 `runs/dataset_labels_retrain`。
+远程仓库不包含：
 
-八个发布权重的固定路径为：
+- `Dataset/` 下的训练、验证和测试数据；
+- `datasets/` 下生成的 COCO 或其他派生数据；
+- 任意 `.pt`、`.pth`、`.onnx` 或 `.engine` 权重；
+- `runs/third_party/D-FINE` 第三方源码和预训练权重。
+
+## 数据集如何发送和放置
+
+### 标准交付形式
+
+推荐发送一个名为 `dataset_labels_bundle.zip` 的压缩包，压缩包根目录必须直接包含：
+
+```text
+images/
+├── train/    1568 张
+├── val/       196 张
+└── test/      196 张
+labels/
+├── train/    1568 个 YOLO txt
+├── val/       196 个 YOLO txt
+└── test/      196 个 YOLO txt
+data.yaml
+```
+
+每张图片必须有同名 `.txt` 标签。每行标签使用标准 YOLO 检测格式：
+
+```text
+class_id x_center y_center width height
+```
+
+坐标均为相对图像宽高归一化到 `[0, 1]` 的值。类别顺序固定为：
+
+```text
+0 insulator_string
+1 broken_shell
+2 flashover_pollution
+3 missing_disc_drop
+```
+
+`data.yaml` 内容应为：
+
+```yaml
+train: images/train
+val: images/val
+test: images/test
+
+nc: 4
+names:
+  0: insulator_string
+  1: broken_shell
+  2: flashover_pollution
+  3: missing_disc_drop
+```
+
+数据统计为：
+
+| 划分 | 图像数 | 类别 0 | 类别 1 | 类别 2 | 类别 3 | 目标总数 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| train | 1568 | 2031 | 492 | 202 | 583 | 3308 |
+| val | 196 | 267 | 50 | 29 | 80 | 426 |
+| test | 196 | 278 | 53 | 16 | 72 | 419 |
+| 合计 | 1960 | 2576 | 595 | 247 | 735 | 4153 |
+
+当前数据内容指纹为：
+
+```text
+245f2efa823a34fb0d2f409fff3ff6edf566bafb64966784176ee8be3923a4fc
+```
+
+计算规则为：
+
+```text
+sha256(sorted split|image_name|image_sha256|label_sha256)
+```
+
+### 发送方打包
+
+在项目根目录执行：
+
+```powershell
+Push-Location .\Dataset\labels
+tar -a -c -f ..\dataset_labels_bundle.zip images labels data.yaml
+Pop-Location
+
+Get-FileHash -Algorithm SHA256 .\Dataset\dataset_labels_bundle.zip
+```
+
+把生成的 `Dataset/dataset_labels_bundle.zip` 和显示出的 SHA-256 一起发给接收方。
+
+当前已有的 `Dataset/labels.zip` 也可以发送，但它只包含 `images/` 和 `labels/`，没有
+`data.yaml`。使用这个旧压缩包时，必须额外发送 `Dataset/labels/data.yaml`。当前
+`labels.zip` 的 SHA-256 是：
+
+```text
+ad368f5e252b0c463373cee4cbef36e25a0c8d133c376d6d7ff4b41e85890494
+```
+
+### 接收方放置
+
+在克隆后的项目根目录执行，其中 `D:\Transfer\dataset_labels_bundle.zip` 换成实际路径：
+
+```powershell
+New-Item -ItemType Directory -Force .\Dataset\labels | Out-Null
+tar -xf D:\Transfer\dataset_labels_bundle.zip -C .\Dataset\labels
+```
+
+最终必须存在：
+
+```text
+Dataset/labels/data.yaml
+Dataset/labels/images/train
+Dataset/labels/images/val
+Dataset/labels/images/test
+Dataset/labels/labels/train
+Dataset/labels/labels/val
+Dataset/labels/labels/test
+```
+
+检查文件数量：
+
+```powershell
+$rows = foreach ($split in 'train', 'val', 'test') {
+  [pscustomobject]@{
+    Split  = $split
+    Images = (Get-ChildItem ".\Dataset\labels\images\$split" -File).Count
+    Labels = (Get-ChildItem ".\Dataset\labels\labels\$split" -File).Count
+  }
+}
+$rows | Format-Table -AutoSize
+```
+
+预期输出：
+
+```text
+train  1568  1568
+val     196   196
+test    196   196
+```
+
+## 权重如何发送和放置
+
+如果接收方只准备从零训练，可以跳过本节。如果需要直接验证、推理或对照本文结果，
+发送方应把八个最佳权重按原相对路径打包。
+
+### 八个固定权重路径
 
 ```text
 runs/detect/runs/detect/dataset_labels_retrain/yolo11s_img960/weights/best.pt
@@ -40,107 +186,76 @@ runs/dfine/dfine_m_img960/best_stg2.pth
 runs/dfine/dfine_l_img960/best_stg2.pth
 ```
 
-为避免把本地派生数据和重复 checkpoint 推入仓库，以下内容明确不发布：
+### 发送方打包权重
 
-- 整个 `Dataset/`，包括本地训练用的 `Dataset/labels`；
-- `datasets/`、`merged_dataset/` 和本地 `Dataset/labels.zip`；
-- 八个保留任务中除上述最佳权重外的 `.pt`/`.pth` checkpoint；
-- 第三方仓库、下载缓存和其他历史训练目录。
-
-## 当前最好结果
-
-所有结果均来自固定的 `rect=False` 方形 letterbox 验证协议：
-
-| 结果 | 模型 | 数据集 | 划分 | mAP50 |
-| --- | --- | --- | --- | ---: |
-| 最佳单模型 | D-FINE-M，COCO 预训练 | `credible_fine_v2` | `val` | 0.8257 |
-| 最佳集成 | YOLO 全图/P2/缺陷专家/ROI + D-FINE-M/L | `credible_fine_v2` | `val` | **0.8375** |
-
-最佳集成的 200 次 Bootstrap mAP50 95% 置信区间为
-`[0.8058, 0.8735]`，分类别 AP50 为：
-
-```text
-insulator_string       0.9651
-broken_shell           0.7726
-flashover_pollution    0.6651
-missing_disc_drop      0.9474
-```
-
-这里的“当前最好”是验证集最好结果，不是锁定测试集结果。由于验证集
-距离项目目标 `mAP50 > 0.95` 仍较远，锁定的 `test` 尚未用于最终评估。
-
-权威实验记录：
-
-- `docs/optimization_protocol.md`
-- `configs/experiments.yaml`
-- `runs/eval/credible_v2_dfine_ml_yolo_full_ensemble_val_bootstrap.json`
-
-## 复现合同
-
-四分类顺序固定为：
-
-```text
-0 insulator_string
-1 broken_shell
-2 flashover_pollution
-3 missing_disc_drop
-```
-
-必须核对以下数据指纹：
-
-```text
-credible_fine_v1
-5b0cab9c44f6985659841ee5dc463284582c711037c987ac78c0a8a6581eb113
-
-credible_fine_v2
-e45e9272436fcaea448f4e4edc7c252989f5be3db8b1a8400a5ba97d034e97e1
-```
-
-不同指纹代表不同基准，结果不能放在同一个排行榜中比较。
-
-当前 v2 指纹实现还会记录解析后的本地源路径。要得到上面的精确 v2 指纹，
-项目根目录需保持为 `E:\School\insulator-defect-detection`，并使用下文约定的
-审核文件路径；换目录构建时必须把新指纹如实记录为另一个复现环境。
-
-本文所说的“从零复现”从以下内容开始：
-
-- 仓库内的原始 `Dataset`、`InsulatorDataSet` 和人工 CPLID 类别映射。
-- 脚本下载的 CC BY 4.0 Supervisely 公开数据。
-- 两份已经完成人工审核的 CSV。
-- 全新的 Python 环境和从官方提交检出的 D-FINE。
-
-人工审核决定是数据合同的一部分，不能由模型自动重新生成。开始前必须把实验归档中的
-两份文件放到以下位置：
-
-```text
-annotations/credible_fine_v1_review_reviewed.csv
-annotations/credible_v1_missing_label_candidates_reviewed.csv
-```
-
-它们的 SHA-256 必须分别为：
-
-```text
-7bc82e0310a208ce7e9448c9edcdc18e19d69626247fcf1c805f5697d5cdcbf0
-331e6f15a42dc575103357b0e8069e3b4deb0dfc72540e2dae9f7e35934a5219
-```
-
-如果缺少这两份人工审核文件，只能重新进行人工审核，不能声称精确复现
-`credible_fine_v2` 或当前最好结果。
-
-可以用下面的命令核对文件：
+在项目根目录执行：
 
 ```powershell
-Get-FileHash -Algorithm SHA256 `
-  .\annotations\credible_fine_v1_review_reviewed.csv, `
-  .\annotations\credible_v1_missing_label_candidates_reviewed.csv
+tar -a -c -f .\dataset_labels_best_weights.zip `
+  runs/detect/runs/detect/dataset_labels_retrain/yolo11s_img960/weights/best.pt `
+  runs/detect/runs/detect/dataset_labels_retrain/yolo11s_img1280/weights/best.pt `
+  runs/detect/runs/detect/dataset_labels_retrain/yolo11m_img960/weights/best.pt `
+  runs/detect/runs/detect/dataset_labels_retrain/yolo11m_p2_img960/weights/best.pt `
+  runs/detect/runs/detect/dataset_labels_retrain/gf_insuyolo_img960/weights/best.pt `
+  runs/detect/runs/detect/dataset_labels_retrain/yolo11s_context_img960/weights/best.pt `
+  runs/dfine/dfine_m_img960/best_stg2.pth `
+  runs/dfine/dfine_l_img960/best_stg2.pth
+
+Get-FileHash -Algorithm SHA256 .\dataset_labels_best_weights.zip
 ```
 
-## 从零开始训练与验证
+接收方把压缩包解压到项目根目录，不能只把文件放进一个统一的 `weights` 文件夹：
 
-下面以 Windows PowerShell、Python 3.11 和 NVIDIA CUDA GPU 为例。所有命令均在
-项目根目录执行。
+```powershell
+tar -xf D:\Transfer\dataset_labels_best_weights.zip -C .
+```
 
-### 1. 准备 Python 与 CUDA 环境
+### 权重完整性
+
+| 模型 | 大小 | SHA-256 |
+| --- | ---: | --- |
+| YOLO11s 960 | 18.4 MiB | `a9c9e155f8134e39e63367ce11eaf94a80fd1637393ba63be64c8e2986a299af` |
+| YOLO11s 1280 | 18.4 MiB | `f326f9fe2ef9ee5b394b7eb24fc410a3ee60000a4961b488f2e5db8758f19d6a` |
+| YOLO11m 960 | 38.7 MiB | `bda6ecc03ddc39f35b6c0a4105f5ee4e28a72b174e201fc994f70ccd826cf09e` |
+| YOLO11m-P2 960 | 39.0 MiB | `c98417777e8e11e132474bcb462d1e9fa7a54f1f328ea7ed227cd2caa5d49112` |
+| GF-InsuYOLO 960 | 6.3 MiB | `e3cf9dfbbbb6799aa0e9d440d65a788f0a4685f110ea8ea6f6cd72c6b1861f48` |
+| YOLO11s Context 960 | 18.8 MiB | `e8b1e2cba12bbd5d6a1131a360081fd041118bf72f67a6ad630e568b1414e2bd` |
+| D-FINE M 960 | 299.5 MiB | `897a81276fc79615f59e937c4a582414a0783a684dd1a9471e14c144323f4e80` |
+| D-FINE L 960 | 477.1 MiB | `455828d5826f7a39f432ffef5433c85639a7f362d9da3e9caf50794b9d0ec148` |
+
+## 八模型验证结果
+
+排名以最佳 `mAP50-95` 为主。所有指标均来自 `Dataset/labels` 的原始 `val` 划分。
+
+| 排名 | 模型（最佳权重） | 最佳轮次 | Precision | Recall | mAP50 | 最佳 mAP50-95 | 末轮 mAP50-95 |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | D-FINE L 960 | 15/15 | 90.50% | 89.44% | 88.31% | **61.83%** | 61.83% |
+| 2 | D-FINE M 960 | 13/15 | 89.72% | **90.14%** | **88.88%** | **61.56%** | 59.03% |
+| 3 | YOLO11s Context 960 | 72/100 | **94.68%** | 81.67% | 88.54% | **57.33%** | 55.65% |
+| 4 | YOLO11m 960 | 81/100 | 87.41% | 82.23% | 87.06% | **56.56%** | 55.09% |
+| 5 | YOLO11s 960 | 73/100 | 89.89% | 80.62% | 86.90% | **55.82%** | 53.88% |
+| 6 | YOLO11s 1280 | 78/100 | 91.47% | 83.63% | 86.68% | **55.23%** | 54.25% |
+| 7 | YOLO11m-P2 960 | 92/100 | 91.60% | 77.15% | 86.34% | **54.62%** | 53.91% |
+| 8 | GF-InsuYOLO 960 | 94/100 | 82.44% | 72.53% | 76.60% | **46.77%** | 46.56% |
+
+按主排名指标 `mAP50-95`，当前最佳单模型是 D-FINE L 960；如果只看 mAP50 或
+Recall，则 D-FINE M 960 略高。当前没有新的八模型集成结果，因此 README 不再把旧
+`credible_fine_v2` 集成写成当前最佳结果。
+
+## 从零复现当前最佳模型
+
+下面以 Windows PowerShell、Python 3.11 和 NVIDIA CUDA GPU 为例。参考实验环境为：
+
+```text
+Python 3.11.15
+PyTorch 2.13.0+cu126
+Ultralytics 8.4.90
+CUDA 12.6
+NVIDIA GeForce RTX 4080 Laptop GPU
+seed 20260731
+```
+
+### 1. 准备环境
 
 ```powershell
 conda create -n insulator-defect python=3.11 -y
@@ -152,37 +267,47 @@ pip install -r .\requirements.txt
 pip install ultralytics==8.4.90
 ```
 
-确认 CUDA 可用：
+确认 CUDA：
 
 ```powershell
 python -c "import torch; print(torch.__version__); print(torch.version.cuda); print(torch.cuda.is_available()); print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU')"
 ```
 
-`torch.cuda.is_available()` 应输出 `True`。当前参考实验使用：
+最后两项应显示 `True` 和实际 NVIDIA GPU 名称。
+
+### 2. 放置并检查数据集
+
+按“数据集如何发送和放置”一节把完整数据解压到：
 
 ```text
-Python 3.11.15
-Ultralytics 8.4.90
-CUDA 12.6
-NVIDIA GeForce RTX 4080 Laptop GPU
-seed 20260708
+Dataset/labels
 ```
 
-下载 YOLO11s 和 YOLO11m 官方预训练权重：
+先确认配置和三个划分存在：
+
+```powershell
+Test-Path .\Dataset\labels\data.yaml
+Test-Path .\Dataset\labels\images\train
+Test-Path .\Dataset\labels\images\val
+Test-Path .\Dataset\labels\images\test
+Test-Path .\Dataset\labels\labels\train
+Test-Path .\Dataset\labels\labels\val
+Test-Path .\Dataset\labels\labels\test
+```
+
+七项都必须输出 `True`。
+
+### 3. 下载 YOLO 通用预训练权重
 
 ```powershell
 python -c "from ultralytics import YOLO; YOLO('yolo11s.pt'); YOLO('yolo11m.pt')"
 ```
 
-### 2. 准备固定版本的 D-FINE
+这些是通用初始化权重，不是本文八个实验的最佳权重。
 
-当前结果使用 D-FINE 提交：
+### 4. 准备固定版本 D-FINE
 
-```text
-7fe2f8889f0b7b817f20c315b40fc15a4fb64ae6
-```
-
-检出代码、应用按 AP50 保存权重的补丁并安装依赖：
+检出本次实验使用的 D-FINE 提交：
 
 ```powershell
 git clone https://github.com/Peterande/D-FINE.git .\runs\third_party\D-FINE
@@ -194,433 +319,236 @@ pip install -r .\requirements.txt
 Pop-Location
 ```
 
-如果该目录已经存在，先用下面的命令确认提交和工作区状态，不要重复克隆或重复应用补丁：
-
-```powershell
-git -C .\runs\third_party\D-FINE rev-parse HEAD
-git -C .\runs\third_party\D-FINE status --short
-```
-
-### 3. 从原始数据构建 `credible_fine_v1`
-
-先把仓库中的异构标签统一为四分类 YOLO 数据。这里的 `unified_fine` 只作为
-可信数据构建器的中间输入，不训练旧的 GF-InsuYOLO：
-
-```powershell
-python .\scripts\build_unified_dataset.py `
-  --mode fine `
-  --cplid-fine-labels .\annotations\cplid_defective_fine_labels.csv `
-  --seed 20260708 `
-  --overwrite
-```
-
-下载公开数据：
-
-```powershell
-python .\scripts\download_public_dataset.py `
-  --output .\datasets\raw\supervisely
-```
-
-确认人工审核文件已经放在约定位置，然后构建 v1：
-
-```powershell
-python .\scripts\build_credible_dataset.py `
-  --existing .\datasets\unified_fine `
-  --public-root .\datasets\raw\supervisely `
-  --output .\datasets\credible_fine_v1 `
-  --review-csv .\annotations\credible_fine_v1_review_reviewed.csv `
-  --seed 20260708 `
-  --overwrite
-
-python .\scripts\make_balanced_view.py `
-  .\datasets\credible_fine_v1 `
-  --overwrite
-
-python .\scripts\validate_credible_dataset.py `
-  .\datasets\credible_fine_v1
-```
-
-检查指纹：
-
-```powershell
-Get-Content .\datasets\credible_fine_v1\metadata\dataset_fingerprint.json
-```
-
-输出必须包含：
-
-```text
-5b0cab9c44f6985659841ee5dc463284582c711037c987ac78c0a8a6581eb113
-```
-
-### 4. 构建 `credible_fine_v2`
-
-v2 只向训练集加入 41 张图中的 44 个人工确认框，不修改 `val`、`test`
-标签或划分：
-
-```powershell
-New-Item -ItemType Directory -Force `
-  .\datasets\credible_fine_v1\audit, `
-  .\runs\audit\credible_v1_missing_label_consensus | Out-Null
-
-Copy-Item -Force `
-  .\annotations\credible_fine_v1_review_reviewed.csv `
-  .\datasets\credible_fine_v1\audit\review_reviewed.csv
-
-Copy-Item -Force `
-  .\annotations\credible_v1_missing_label_candidates_reviewed.csv `
-  .\runs\audit\credible_v1_missing_label_consensus\candidates_reviewed.csv
-
-python .\scripts\apply_pseudo_labels.py `
-  --source .\datasets\credible_fine_v1 `
-  --proposals .\runs\audit\credible_v1_missing_label_consensus\candidates_reviewed.csv `
-  --audit-review .\datasets\credible_fine_v1\audit\review_reviewed.csv `
-  --output .\datasets\credible_fine_v2 `
-  --min-score 0.65 `
-  --min-agreement-iou 0.70 `
-  --max-gt-iou 0.10 `
-  --repeat-changed 0 `
-  --require-review `
-  --overwrite
-
-python .\scripts\validate_credible_dataset.py `
-  .\datasets\credible_fine_v2
-```
-
-检查最终指纹：
-
-```powershell
-Get-Content .\datasets\credible_fine_v2\metadata\dataset_fingerprint.json
-```
-
-输出必须包含：
-
-```text
-e45e9272436fcaea448f4e4edc7c252989f5be3db8b1a8400a5ba97d034e97e1
-```
-
-指纹不一致时立即停止，不要继续训练或把结果写入当前排行榜。
-
-### 5. 复现最佳单模型 D-FINE-M
-
-把 v2 导出为 COCO，生成 D-FINE-M 配置并下载 COCO 预训练权重：
+生成最佳模型 D-FINE L 960 的 COCO 数据、配置并下载 COCO 预训练权重：
 
 ```powershell
 python .\scripts\prepare_dfine.py `
-  --dataset .\datasets\credible_fine_v2 `
-  --output .\datasets\credible_fine_v2_coco `
+  --dataset .\Dataset\labels `
+  --output .\datasets\dataset_labels_coco `
   --dfine-root .\runs\third_party\D-FINE `
   --project-root . `
   --imgsz 960 `
   --epochs 15 `
   --batch 4 `
-  --model-size m `
+  --model-size l `
   --pretrained-variant coco `
-  --multi-scale `
-  --config-name dfine_hgnetv2_m_insulator.yml `
-  --run-name credible_fine_v2_dfine_m_960 `
+  --config-name dfine_hgnetv2_l_dataset_labels_coco.yml `
+  --run-name dfine_l_img960 `
   --download-weights `
   --overwrite
 ```
 
-训练：
+### 5. 训练当前最佳 D-FINE L 960
 
 ```powershell
 Push-Location .\runs\third_party\D-FINE
 python .\train.py `
-  -c .\configs\dfine\custom\dfine_hgnetv2_m_insulator.yml `
+  -c .\configs\dfine\custom\dfine_hgnetv2_l_dataset_labels_coco.yml `
+  -t .\weights\dfine_l_coco.pth `
   --use-amp `
-  --seed=20260708 `
-  -t .\weights\dfine_m_coco.pth
+  --seed 20260731
 Pop-Location
 ```
 
-当前最好单模型使用：
+训练共 15 轮，batch 为 4，固定输入为 960。参考 RTX 4080 Laptop GPU 耗时约
+3 小时 14 分钟。最佳权重应生成在：
 
 ```text
-runs/dfine/credible_fine_v2_dfine_m_960/best_stg2.pth
+runs/dfine/dfine_l_img960/best_stg2.pth
 ```
 
-导出验证集预测：
+参考验证结果：
+
+```text
+Precision       90.50%
+Recall          89.44%
+mAP50           88.31%
+mAP50-95        61.83%
+best epoch      15/15
+```
+
+### 6. 用统一评估器复核 D-FINE L
+
+先把 D-FINE 预测导出为项目统一 JSON：
 
 ```powershell
 python .\scripts\predict_dfine.py `
   --dfine-root .\runs\third_party\D-FINE `
-  --config .\runs\third_party\D-FINE\configs\dfine\custom\dfine_hgnetv2_m_insulator.yml `
-  --weights .\runs\dfine\credible_fine_v2_dfine_m_960\best_stg2.pth `
-  --data .\datasets\credible_fine_v2\data.yaml `
+  --config .\runs\third_party\D-FINE\configs\dfine\custom\dfine_hgnetv2_l_dataset_labels_coco.yml `
+  --weights .\runs\dfine\dfine_l_img960\best_stg2.pth `
+  --data .\Dataset\labels\data.yaml `
   --split val `
   --imgsz 960 `
   --batch 4 `
   --conf 0.001 `
   --device 0 `
-  --output .\runs\eval\credible_v2_dfine_m_960_val_predictions.json
+  --output .\runs\eval\dataset_labels_dfine_l_img960_val_predictions.json
 ```
 
-用项目统一评估器计算指标：
+再计算统一指标：
 
 ```powershell
 python .\scripts\evaluate_detector.py `
-  --data .\datasets\credible_fine_v2\data.yaml `
+  --data .\Dataset\labels\data.yaml `
   --split val `
   --mode external `
-  --external-predictions .\runs\eval\credible_v2_dfine_m_960_val_predictions.json `
+  --external-predictions .\runs\eval\dataset_labels_dfine_l_img960_val_predictions.json `
   --conf 0.001 `
   --iou 0.70 `
-  --seed 20260708 `
-  --output .\runs\eval\credible_v2_dfine_m_960_val.json
+  --seed 20260731 `
+  --output .\runs\eval\dataset_labels_dfine_l_img960_val.json
 ```
 
-参考结果：
+评估时不要改变数据划分、图像尺寸或根据验证结果调阈值后再与表中结果比较。
+
+## 从零复现全部八个模型
+
+完整训练矩阵位于：
 
 ```text
-mAP50     0.8257
-mAP50-95  0.5669
-mAP75     0.5846
+configs/dataset_labels_train_matrix.yaml
 ```
 
-### 6. 准备最佳集成的 YOLO 数据视图
+矩阵固定：
 
-缺陷专家只保留三个缺陷类：
+```text
+YOLO epochs       100
+D-FINE epochs      15
+seed         20260731
+YOLO patience       30
+workers              4
+augment       moderate
+device                0
+```
+
+先查看将要执行的全部命令：
 
 ```powershell
-python .\scripts\make_class_projection_dataset.py `
-  .\datasets\credible_fine_v1 `
-  .\datasets\credible_fine_v1_defects `
-  --classes 1 2 3 `
-  --overwrite
+python .\scripts\train_dataset_labels_all.py --dry-run
 ```
 
-ROI 分支使用 15% 上下文、两个训练扰动，并在高效训练视图中只保留一个正样本扰动：
+队列会读取仓库内已经发布的完成状态并跳过 `complete` 项。真正从零重跑前，先保留
+参考状态副本，再删除活动状态文件：
 
 ```powershell
-python .\scripts\make_crop_dataset.py `
-  --input .\datasets\credible_fine_v1 `
-  --output .\datasets\credible_fine_v1_crops `
-  --margin 0.15 `
-  --train-jitter-count 2 `
-  --jitter-center 0.05 `
-  --jitter-scale 0.10 `
-  --efficient-positive-jitters 1 `
-  --seed 20260708 `
-  --overwrite
+Copy-Item `
+  .\runs\dataset_labels_retrain\status.json `
+  .\runs\dataset_labels_retrain\status.reference.json `
+  -Force
+Remove-Item .\runs\dataset_labels_retrain\status.json
 ```
 
-### 7. 训练最佳集成的四个 YOLO 分支
-
-训练 YOLO11s 全图基线：
-
-```powershell
-python .\train.py `
-  --model .\yolo11s.pt `
-  --data .\datasets\credible_fine_v1\data_unbalanced.yaml `
-  --imgsz 960 `
-  --epochs 40 `
-  --batch 16 `
-  --device 0 `
-  --seed 20260708 `
-  --augment-preset moderate `
-  --close-mosaic 15 `
-  --patience 20 `
-  --name credible_v1_yolo11s_960_aug_moderate_40
-```
-
-训练 YOLO11m-P2：
-
-```powershell
-python .\train.py `
-  --model .\configs\yolo11m_p2.yaml `
-  --weights .\yolo11m.pt `
-  --data .\datasets\credible_fine_v1\data.yaml `
-  --imgsz 960 `
-  --epochs 40 `
-  --batch 6 `
-  --device 0 `
-  --seed 20260708 `
-  --augment-preset moderate `
-  --close-mosaic 15 `
-  --patience 20 `
-  --name credible_v1_yolo11m_p2_960_b6
-```
-
-从全图基线初始化三个缺陷类专家：
-
-```powershell
-python .\train.py `
-  --model .\yolo11s.pt `
-  --weights .\runs\detect\runs\credible_v1_yolo11s_960_aug_moderate_40\weights\best_map50.pt `
-  --data .\datasets\credible_fine_v1_defects\data.yaml `
-  --imgsz 960 `
-  --epochs 30 `
-  --batch 8 `
-  --device 0 `
-  --seed 20260708 `
-  --optimizer AdamW `
-  --lr0 0.0005 `
-  --augment-preset moderate `
-  --name credible_v1_yolo11s_defect_expert_960
-```
-
-训练 ROI 局部模型：
-
-```powershell
-python .\train.py `
-  --model .\yolo11s.pt `
-  --data .\datasets\credible_fine_v1_crops\data_efficient.yaml `
-  --imgsz 640 `
-  --epochs 30 `
-  --batch 16 `
-  --workers 4 `
-  --device 0 `
-  --seed 20260708 `
-  --optimizer AdamW `
-  --lr0 0.001 `
-  --lrf 0.01 `
-  --weight-decay 0.0005 `
-  --augment-preset moderate `
-  --close-mosaic 8 `
-  --patience 10 `
-  --name credible_v1_local_roi_yolo11s_640_efficient_v2
-```
-
-后续集成统一使用各目录中的 `weights/best_map50.pt`。如果同名输出目录已经存在，
-Ultralytics 可能追加数字后缀；此时必须把后续路径改成实际目录，不能误用旧权重。
-
-### 8. 训练集成用 D-FINE-L
-
-重新导出同一个 v2 COCO 数据并生成固定 960 输入的 D-FINE-L 配置：
+为两个 D-FINE 任务预先生成配置并下载通用预训练权重：
 
 ```powershell
 python .\scripts\prepare_dfine.py `
-  --dataset .\datasets\credible_fine_v2 `
-  --output .\datasets\credible_fine_v2_coco `
+  --dataset .\Dataset\labels `
+  --output .\datasets\dataset_labels_coco `
   --dfine-root .\runs\third_party\D-FINE `
   --project-root . `
-  --imgsz 960 `
-  --epochs 12 `
-  --batch 4 `
-  --model-size l `
-  --pretrained-variant coco `
-  --config-name dfine_hgnetv2_l_insulator_coco.yml `
-  --run-name credible_fine_v2_dfine_l_coco_960_b4_fixed `
-  --download-weights `
-  --overwrite
-```
+  --imgsz 960 --epochs 15 --batch 4 `
+  --model-size m --pretrained-variant coco `
+  --config-name dfine_hgnetv2_m_dataset_labels_coco.yml `
+  --run-name dfine_m_img960 `
+  --download-weights --overwrite
 
-训练：
-
-```powershell
-Push-Location .\runs\third_party\D-FINE
-python .\train.py `
-  -c .\configs\dfine\custom\dfine_hgnetv2_l_insulator_coco.yml `
-  --use-amp `
-  --seed=20260708 `
-  -t .\weights\dfine_l_coco.pth
-Pop-Location
-```
-
-集成使用补丁保存的 AP50 最佳权重：
-
-```text
-runs/dfine/credible_fine_v2_dfine_l_coco_960_b4_fixed/best_map50.pth
-```
-
-导出验证集预测：
-
-```powershell
-python .\scripts\predict_dfine.py `
+python .\scripts\prepare_dfine.py `
+  --dataset .\Dataset\labels `
+  --output .\datasets\dataset_labels_coco `
   --dfine-root .\runs\third_party\D-FINE `
-  --config .\runs\third_party\D-FINE\configs\dfine\custom\dfine_hgnetv2_l_insulator_coco.yml `
-  --weights .\runs\dfine\credible_fine_v2_dfine_l_coco_960_b4_fixed\best_map50.pth `
-  --data .\datasets\credible_fine_v2\data.yaml `
-  --split val `
-  --imgsz 960 `
-  --batch 4 `
-  --conf 0.001 `
-  --device 0 `
-  --output .\runs\eval\credible_v2_dfine_l_coco_960_val_predictions.json
+  --project-root . `
+  --imgsz 960 --epochs 15 --batch 4 `
+  --model-size l --pretrained-variant coco `
+  --config-name dfine_hgnetv2_l_dataset_labels_coco.yml `
+  --run-name dfine_l_img960 `
+  --download-weights --overwrite
 ```
 
-### 9. 复现当前最佳集成
-
-最终集成组成如下：
-
-```text
-全图主模型        YOLO11s，4 类
-P2 补充分支       YOLO11m-P2，4 类，class offset 0
-缺陷专家          YOLO11s，3 类，class offset 1
-ROI 局部分支      YOLO11s，3 类
-外部预测 1        D-FINE-M，4 类
-外部预测 2        D-FINE-L，4 类
-```
-
-使用保存下来的真实融合参数运行验证：
+然后启动可续跑队列：
 
 ```powershell
-python .\scripts\evaluate_detector.py `
-  --weights .\runs\detect\runs\credible_v1_yolo11s_960_aug_moderate_40\weights\best_map50.pt `
-  --local-weights .\runs\detect\runs\credible_v1_local_roi_yolo11s_640_efficient_v2\weights\best_map50.pt `
-  --data .\datasets\credible_fine_v2\data.yaml `
-  --split val `
-  --mode ensemble-two-stage `
-  --ensemble-weights `
-    .\runs\detect\runs\credible_v1_yolo11m_p2_960_b6\weights\best_map50.pt `
-    .\runs\detect\runs\credible_v1_yolo11s_defect_expert_960\weights\best_map50.pt `
-  --external-predictions `
-    .\runs\eval\credible_v2_dfine_m_960_val_predictions.json `
-    .\runs\eval\credible_v2_dfine_l_coco_960_val_predictions.json `
-  --ensemble-class-offsets 0 1 `
-  --two-stage-fusion union `
-  --imgsz 960 `
-  --batch 8 `
-  --local-imgsz 640 `
-  --conf 0.001 `
-  --operating-conf 0.25 `
-  --iou 0.70 `
-  --fusion-iou 0.55 `
-  --device 0 `
-  --bootstrap 200 `
-  --seed 20260708 `
-  --output .\runs\eval\credible_v2_dfine_ml_yolo_full_ensemble_val_bootstrap.json `
-  --leaderboard .\runs\eval\leaderboard_credible_v2.csv
+python .\scripts\train_dataset_labels_all.py
 ```
 
-参考结果：
+八个模型串行训练在参考机器上总计约 24 小时。运行状态和日志位于：
 
 ```text
-mAP50       0.8375
-mAP50-95    0.5727
-mAP75       0.6135
-mAP50 CI95  [0.8058, 0.8735]
+runs/dataset_labels_retrain/status.json
+runs/dataset_labels_retrain/logs/
 ```
 
-评估器还会生成：
+如果只训练某几个任务：
+
+```powershell
+python .\scripts\train_dataset_labels_all.py `
+  --only yolo11s_img960 yolo11s_context_img960 dfine_l_img960
+```
+
+任务名必须来自：
 
 ```text
-runs/eval/credible_v2_dfine_ml_yolo_full_ensemble_val_bootstrap_per_class.csv
-runs/eval/credible_v2_dfine_ml_yolo_full_ensemble_val_bootstrap_errors.csv
-runs/eval/leaderboard_credible_v2.csv
+yolo11s_img960
+yolo11s_img1280
+yolo11m_img960
+yolo11m_p2_img960
+gf_insuyolo_img960
+yolo11s_context_img960
+dfine_m_img960
+dfine_l_img960
 ```
 
-### 10. 复现检查清单
+## 直接使用收到的 YOLO 权重
 
-只有同时满足以下条件，才可以把实验标记为当前结果的复现：
+以 YOLO11s Context 960 为例验证：
 
-- v1、v2 指纹与本文完全一致。
-- D-FINE 提交为 `7fe2f8889f0b7b817f20c315b40fc15a4fb64ae6`。
-- 所有训练和评估均使用种子 `20260708`。
-- YOLO 使用 `best_map50.pt`，D-FINE-M 使用 `best_stg2.pth`，
-  D-FINE-L 使用 `best_map50.pth`。
-- D-FINE 预测置信度保留到 `0.001`，不提前裁掉低分框。
-- 最终评估使用 `rect=False` 方形 letterbox、`fusion_iou=0.55`
-  和 200 次 Bootstrap。
-- 只在 `val` 上对照当前结果；未经实验门控不要使用锁定的 `test`。
-- 报告同时记录 overall、分类别 AP、正常图误报率、数据指纹和完整权重路径。
+```powershell
+yolo detect val `
+  model=.\runs\detect\runs\detect\dataset_labels_retrain\yolo11s_context_img960\weights\best.pt `
+  data=.\Dataset\labels\data.yaml `
+  split=val `
+  imgsz=960 `
+  batch=12 `
+  conf=0.001 `
+  iou=0.70 `
+  rect=False `
+  device=0
+```
+
+预测自定义图片目录：
+
+```powershell
+yolo detect predict `
+  model=.\runs\detect\runs\detect\dataset_labels_retrain\yolo11s_context_img960\weights\best.pt `
+  source=D:\Images\insulator-test `
+  imgsz=960 `
+  conf=0.25 `
+  device=0 `
+  save=True
+```
+
+GF-InsuYOLO 和 Context YAML 使用了项目自定义模块，优先通过项目的 `train.py`、
+`infer.py` 或已注册自定义模块的代码入口加载；普通 YOLO11s/YOLO11m 权重可直接使用
+Ultralytics CLI。
+
+## 复现检查清单
+
+- 数据必须位于 `Dataset/labels`，目录中不能再多套一层 `labels`。
+- 三个划分图像/标签数必须为 `1568/196/196` 且一一对应。
+- 类别顺序必须与 `data.yaml` 完全一致。
+- 使用种子 `20260731`、固定原始划分和训练矩阵中的 batch/尺寸。
+- YOLO 比较使用各任务的 `weights/best.pt`。
+- D-FINE M/L 比较使用各任务的 `best_stg2.pth`。
+- 收到权重后逐个核对 SHA-256，不能把占位文件当作真实权重。
+- 不使用 Git LFS，也不要期望普通 `git clone` 下载数据或权重。
+- 当前表格只代表原始验证划分；无泄漏新划分建立后必须重新训练并单独排名。
 
 ## 项目入口
 
-- `train.py`：带实验清单和 AP50 最佳权重保存的 Ultralytics 训练入口。
-- `scripts/prepare_dfine.py`：YOLO 到 COCO 导出及 D-FINE 配置生成。
-- `scripts/predict_dfine.py`：导出模型无关的 D-FINE 预测 JSON。
-- `scripts/evaluate_detector.py`：统一单模型、外部预测和融合评估。
-- `docs/optimization_protocol.md`：数据合同、实验门控、完整正负实验结论。
-- `configs/experiments.yaml`：当前模型、权重、指标和报告索引。
+- `configs/dataset_labels_train_matrix.yaml`：八模型完整训练矩阵。
+- `scripts/train_dataset_labels_all.py`：可续跑串行训练队列。
+- `train.py`：YOLO、P2、GF-InsuYOLO 和 Context 训练入口。
+- `scripts/prepare_dfine.py`：数据转 COCO、D-FINE 配置生成和预训练权重下载。
+- `scripts/predict_dfine.py`：D-FINE 预测导出。
+- `scripts/evaluate_detector.py`：项目统一评估器。
+- `runs/dataset_labels_retrain/status.json`：已完成八任务状态和耗时。
+- `docs/optimization_execution_plan_dataset_labels.md`：数据审计、泄漏说明和后续优化方案。
